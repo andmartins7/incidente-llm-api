@@ -1,0 +1,25 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: incidente-llm-api
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODEL=llama3.2
+      - TZ=America/Sao_Paulo
+    depends_on:
+      - ollama
+    ports:
+      - "8000:8000"
+
+volumes:
+  ollama:
