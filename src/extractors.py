@@ -11,7 +11,13 @@ def _now_tz() -> datetime.datetime:
         return datetime.datetime.now(zoneinfo.ZoneInfo("America/Sao_Paulo"))
 
 def parse_datetime_pt(texto: str, referencia_iso: Optional[str] = None) -> Optional[datetime.datetime]:
-    settings = {"PREFER_DATES_FROM": "past", "RELATIVE_BASE": None, "TIMEZONE": TZ, "RETURN_AS_TIMEZONE_AWARE": True, "DATE_ORDER": "DMY", "LANGUAGE_DETECTION_CONFIDENCE_THRESHOLD": 0.0}
+    settings = {
+        "PREFER_DATES_FROM": "past",
+        "TIMEZONE": TZ,
+        "RETURN_AS_TIMEZONE_AWARE": True,
+        "DATE_ORDER": "DMY",
+        "LANGUAGE_DETECTION_CONFIDENCE_THRESHOLD": 0.0,
+    }
     if referencia_iso:
         try:
             ref = dateparser.parse(referencia_iso)
