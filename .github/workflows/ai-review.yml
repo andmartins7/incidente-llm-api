@@ -5,28 +5,36 @@ on:
     types: [opened, synchronize]
 
 jobs:
-  review:
+  codex_review:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout do código
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-      - name: Setup Python
+      - name: Configurar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Install Dependencies
-        run: pip install openai pygithub requests
+      - name: Instalar dependências
+        run: |
+          pip install openai pygithub requests
 
-      - name: Run AI Review
+      - name: Executar revisão automática com IA
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
-          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
-        run: python .github/scripts/ai_reviewer.py
+        run: |
+          python .github/scripts/ai_reviewer.py
+
+      - name: Mensagem de finalização
+        run: |
+          echo "Revisão automática concluída para PR #${{ github.event.pull_request.number }} do repositório ${{ github.repository }}"
