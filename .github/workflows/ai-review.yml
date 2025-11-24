@@ -29,7 +29,7 @@ jobs:
       - name: Executar revisão automática com IA
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
           TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
@@ -40,8 +40,8 @@ jobs:
         if: always()
         run: |
           curl -H "Content-Type: application/json" \
-                -d "{\"text\":\"Revisão automática concluída para PR #${{ env.PR_NUMBER }} no repositório ${{ env.REPO_NAME }}\"}" \
-                ${{ env.TEAMS_WEBHOOK_URL }}
+               -d "{\"text\":\"Revisão automática concluída para PR #${{ env.PR_NUMBER }} no repositório ${{ env.REPO_NAME }}\"}" \
+               ${{ env.TEAMS_WEBHOOK_URL }}
 
       - name: Finalização
         run: echo "Workflow concluído para PR #${{ github.event.pull_request.number }}"
