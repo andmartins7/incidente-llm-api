@@ -3,6 +3,7 @@ import re, datetime, zoneinfo
 from typing import Optional, Dict
 import dateparser
 from .settings import TZ
+from .localities import detect_localidade
 
 def _now_tz() -> datetime.datetime:
     try:
@@ -83,13 +84,14 @@ def fallback_extract(texto: str, referencia_iso: Optional[str] = None) -> Dict[s
     data_ocorrencia = normalize_dt(dt) if dt else ""
 
     # === local ===
-    local = ""
-    # heurística: após "no|na|em|no escritório de" capturar sequência até vírgula/ponto/ "houve"
-    m_loc = re.search(r"\b(?:no|na|em)\s+(?:escritório\s+de\s+)?([A-ZÁÉÍÓÚÂÊÔÃÕÇ][^,.;]*?)(?=,|\s+houve|\s+ocorreu|\.|$)", t)
-    if m_loc:
-        local = m_loc.group(1).strip()
-        # limpar sufixos comuns
-        local = re.sub(r"\b(da|de|do)\b\s*$", "", local).strip()
+    local = detect_localidade(t)
+    if not local:
+        # heurística: após "no|na|em|no escritório de" capturar sequência até vírgula/ponto/ "houve"
+        m_loc = re.search(r"\b(?:no|na|em)\s+(?:escritório\s+de\s+)?([A-ZÁÉÍÓÚÂÊÔÃÕÇ][^,.;]*?)(?=,|\s+houve|\s+ocorreu|\.|$)", t)
+        if m_loc:
+            local = m_loc.group(1).strip()
+            # limpar sufixos comuns
+            local = re.sub(r"\b(da|de|do)\b\s*$", "", local).strip()
 
     # === tipo_incidente ===
     tipo_incidente = ""
