@@ -1,69 +1,98 @@
 import os
 import sys
-from github import Github
+import logging
+from github import Github, GithubException
 import openai
+from typing import List
 
-def main():
-    # Configurações a partir de variáveis de ambiente
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    github_token = os.getenv("GIT_TOKEN")
-    pr_number = os.getenv("PR_NUMBER")
-    repo_name = os.getenv("REPO_NAME")
+# Configuração de logger
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
-    if not all([openai_api_key, github_token, pr_number, repo_name]):
-        print("Faltando alguma variável de ambiente. Verifique OPENAI_API_KEY, GIT_TOKEN, PR_NUMBER, REPO_NAME.")
+def get_env_var(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        logging.error(f"Variável de ambiente obrigatória faltando: {name}")
         sys.exit(1)
+    return value
 
-    openai.api_key = openai_api_key
-    gh = Github(github_token)
-    repo = gh.get_repo(repo_name)
-    pr = repo.get_pull(int(pr_number))
-
-    # Obter os arquivos modificados no PR
-    files = pr.get_files()
+def filter_relevant_files(files) -> List[str]:
+    relevant_ext = ('.py', '.js', '.ts')  # ajuste conforme sua stack
     diffs = []
     for f in files:
-        # Focar em extensões relevantes (ajuste conforme sua stack)
-        if f.filename.endswith(('.py', '.js', '.ts')):
-            diff_text = f.patch
-            if diff_text:
-                diffs.append(f"File: {f.filename}\n{diff_text}")
+        if f.filename.endswith(relevant_ext) and f.patch:
+            diffs.append(f"File: {f.filename}\n{f.patch}")
+    return diffs
 
-    if not diffs:
-        print("Nenhuma mudança relevante detectada para revisão automática.")
-        return
-
-    # Construir prompt para OpenAI
+def call_openai_model(api_key: str, diffs: List[str]) -> str:
+    openai.api_key = api_key
     prompt = (
-        "Você é um engenheiro sênior de software. "
-        "Revise as seguintes mudanças para bugs, segurança, performance, manutenção e estilo de código:\n\n"
+        "Você é um engenheiro de software sênior. "
+        "Revise as mudanças a seguir focando em: bugs, segurança, performance, manutenção e estilo.\n\n"
         + "\n\n".join(diffs)
     )
-
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-5.1",
+            model="gpt-4o",  # ajuste conforme modelo disponível na sua conta
             messages=[
-                {"role": "system", "content": "Você é um avaliador de código para Pull Requests."},
+                {"role": "system", "content": "Você é avaliador de código para Pull Requests."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.1,
             max_tokens=800
         )
+        comment = response["choices"][0]["message"]["content"]
+        return comment
     except Exception as e:
-        print("Erro ao chamar API da OpenAI:", e)
+        logging.error(f"Erro na chamada à API da OpenAI: {e}")
         sys.exit(1)
 
-    review_comments = response["choices"][0]["message"]["content"]
-    print("Comentários do agente:\n", review_comments)
-
-    # Postar comentário no PR
+def post_comment(pr, message: str):
     try:
-        pr.create_issue_comment(f"🤖 Revisão automática:\n\n{review_comments}")
-        print("Comentário publicado no PR.")
-    except Exception as e:
-        print("Erro ao publicar comentário no PR:", e)
+        pr.create_issue_comment(f"Revisão automática:\n\n{message}")
+        logging.info("Comentário publicado no PR com sucesso.")
+    except GithubException as e:
+        logging.error(f"Falha ao publicar comentário no PR: {e}")
         sys.exit(1)
+
+def main():
+    # Obter variáveis de ambiente
+    openai_api_key = get_env_var("OPENAI_API_KEY")
+    github_token = get_env_var("GIT_TOKEN")
+    pr_number_str = get_env_var("PR_NUMBER")
+    repo_name = get_env_var("REPO_NAME")
+
+    try:
+        pr_number = int(pr_number_str)
+    except ValueError:
+        logging.error(f"PR_NUMBER inválido: {pr_number_str}")
+        sys.exit(1)
+
+    gh = Github(github_token)
+    try:
+        repo = gh.get_repo(repo_name)
+        pr = repo.get_pull(pr_number)
+    except GithubException as e:
+        logging.error(f"Erro ao acessar repositório ou Pull Request: {e}")
+        sys.exit(1)
+
+    files = pr.get_files()
+    diffs = filter_relevant_files(files)
+    if not diffs:
+        logging.info("Nenhuma mudança relevante detectada para revisão automática.")
+        return
+
+    logging.info(f"Processando {len(diffs)} arquivo(s) relevantes para revisão.")
+
+    comment = call_openai_model(openai_api_key, diffs)
+    if not comment.strip():
+        logging.info("API retornou sem conteúdo. Nada a comentar.")
+        return
+
+    post_comment(pr, comment)
 
 if __name__ == "__main__":
     main()
