@@ -38,20 +38,30 @@ def fallback_extract(texto: str, referencia_iso: Optional[str] = None) -> Dict[s
     '''
     t = texto
 
+    # Identifica pistas relativas para reutilizar em mais de uma heurística.
+    rel_hint = None
+    for palavra in ["anteontem", "ontem", "hoje"]:
+        if re.search(rf"\b{palavra}\b", t, re.IGNORECASE):
+            rel_hint = palavra
+            break
+
     # === data/hora ===
-    dt = None
+    # Primeiro tenta um parse completo com dateparser (cobre casos como "ontem às 14h").
+    dt = parse_datetime_pt(t, referencia_iso)
+
     # procura por padrões explícitos: "às 14h30", "14:00", "14h"
-    m_time = re.search(r"\b(\d{1,2}):(\d{2})\b", t)
-    if m_time:
-        horas, mins = int(m_time.group(1)), int(m_time.group(2))
-        base = parse_datetime_pt("hoje", referencia_iso) or _now_tz()
-        dt = base.replace(hour=horas, minute=mins, second=0, microsecond=0)
-    else:
-        m_h = re.search(r"\b(\d{1,2})h\b", t, re.IGNORECASE)
-        if m_h:
-            horas = int(m_h.group(1))
-            base = parse_datetime_pt("hoje", referencia_iso) or _now_tz()
-            dt = base.replace(hour=horas, minute=0, second=0, microsecond=0)
+    if not dt:
+        m_time = re.search(r"\b(\d{1,2}):(\d{2})\b", t)
+        if m_time:
+            horas, mins = int(m_time.group(1)), int(m_time.group(2))
+            base = parse_datetime_pt(rel_hint or "hoje", referencia_iso) or _now_tz()
+            dt = base.replace(hour=horas, minute=mins, second=0, microsecond=0)
+        else:
+            m_h = re.search(r"\b(\d{1,2})h\b", t, re.IGNORECASE)
+            if m_h:
+                horas = int(m_h.group(1))
+                base = parse_datetime_pt(rel_hint or "hoje", referencia_iso) or _now_tz()
+                dt = base.replace(hour=horas, minute=0, second=0, microsecond=0)
 
     # procura datas explícitas dd/mm/aaaa
     m_date = re.search(r"\b(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\b", t)
@@ -67,11 +77,8 @@ def fallback_extract(texto: str, referencia_iso: Optional[str] = None) -> Dict[s
             dt = None
 
     # termos relativos: hoje, ontem, anteontem
-    if not dt:
-        for palavra in ["anteontem", "ontem", "hoje"]:
-            if re.search(rf"\b{palavra}\b", t, re.IGNORECASE):
-                dt = parse_datetime_pt(palavra, referencia_iso)
-                break
+    if not dt and rel_hint:
+        dt = parse_datetime_pt(rel_hint, referencia_iso)
 
     data_ocorrencia = normalize_dt(dt) if dt else ""
 
