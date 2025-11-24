@@ -4,10 +4,12 @@ from typing import Optional
 from .settings import OLLAMA_HOST, OLLAMA_MODEL, TZ
 
 SYS_PROMPT = (
-    "Você é um extrator de informações. "
-    "Sua tarefa é ler uma descrição de incidente em português e extrair EXATAMENTE os campos: "
-    "data_ocorrencia, local, tipo_incidente, impacto. "
-    "Responda SOMENTE um objeto JSON válido, sem comentários, sem texto extra."
+    "Você é um extrator de informações especializado em incidentes. Siga estritamente as regras abaixo:\n"
+    "1) Trabalhe APENAS com o texto fornecido na solicitação. Não invente, traduza ou enriqueça dados externos.\n"
+    "2) Extraia exclusivamente os campos data_ocorrencia, local, tipo_incidente e impacto.\n"
+    "3) Responda sempre um único objeto JSON válido, sem Markdown, sem comentários, sem explicações.\n"
+    "4) Utilize string vazia (\"\") quando um campo estiver ausente ou não puder ser determinado.\n"
+    "5) Preserve o idioma original do texto ao preencher campos."
 )
 
 def now_tz() -> datetime.datetime:
@@ -24,16 +26,18 @@ async def extract_with_llm(texto: str, referencia_iso: Optional[str] = None) -> 
     '''
     ref = referencia_iso or now_tz().isoformat()
     user_prompt = (
-        f"Hoje é {ref}. Leia a descrição e extraia os 4 campos. "
-        "Se um campo não existir no texto, retorne string vazia para ele.\n\n"
-        "Descrição:\n"
-        f"{texto}\n\n"
-        "Formato de saída estrito:\n"
-        '{'
-        '"data_ocorrencia": "YYYY-MM-DD HH:MM", '
-        '"local": "string", '
-        '"tipo_incidente": "string", '
-        '"impacto": "string"'
+        f"Data/hora de referência: {ref}.\n"
+        "Leia a descrição delimitada e devolva somente o JSON especificado.\n"
+        "Descrição do incidente (não resuma, não reformule):\n"
+        "<<<\n"
+        f"{texto}\n"
+        ">>>\n"
+        "Formato de saída obrigatório (ordem fixa das chaves):\n"
+        '{\n'
+        '  "data_ocorrencia": "YYYY-MM-DD HH:MM",\n'
+        '  "local": "string",\n'
+        '  "tipo_incidente": "string",\n'
+        '  "impacto": "string"\n'
         '}'
     )
 
