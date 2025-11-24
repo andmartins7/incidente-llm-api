@@ -1,97 +1,69 @@
 import os
-import requests
-import openai
+import sys
 from github import Github
-
-def get_pr_diff(owner: str, repo_name: str, pr_number: int, github_token: str) -> str:
-    """
-    Obtém o diff da Pull Request via GitHub API.
-    """
-    url = f"https://api.github.com/repos/{owner}/{repo_name}/pulls/{pr_number}"
-    headers = {
-        "Accept": "application/vnd.github.v3.diff",
-        "Authorization": f"token {github_token}"
-    }
-    resp = requests.get(url, headers=headers)
-    resp.raise_for_status()
-    return resp.text  # o diff completo como texto
-
-def call_openai_review(diff: str, openai_api_key: str) -> str:
-    """
-    Envia o diff para OpenAI e obtém uma resposta simples de revisão.
-    """
-    openai.api_key = openai_api_key
-    prompt = (
-        "Você é um revisor de código. Analise o seguinte diff de código e indique "
-        "possíveis melhorias, erros de estilo ou bugs. Seja objetivo:\n\n"
-        f"{diff}\n\n"
-        "Por favor, responda em português."
-    )
-    resp = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "Você é um assistente inteligente para revisão de código."},
-            {"role": "user", "content": prompt}
-        ],
-        max_tokens=500,
-        temperature=0.2
-    )
-    # extraímos o texto da primeira escolha
-    review = resp.choices[0].message.content.strip()
-    return review
-
-def post_pr_comment(owner: str, repo_name: str, pr_number: int, github_token: str, comment: str):
-    """
-    Publica um comentário na Pull Request via PyGithub.
-    """
-    g = Github(github_token)
-    repo = g.get_repo(f"{owner}/{repo_name}")
-    pr = repo.get_pull(pr_number)
-    pr.create_issue_comment(comment)
+import openai
 
 def main():
-    # variáveis de ambiente esperadas
+    # Configurações a partir de variáveis de ambiente
     openai_api_key = os.getenv("OPENAI_API_KEY")
-    github_token    = os.getenv("GITHUB_TOKEN")
-    # as variáveis passadas pelo workflow
-    pr_number       = int(os.getenv("PR_NUMBER", "0"))
-    repo_full       = os.getenv("REPO_NAME", "")
-    # separa owner / repo
-    if "/" not in repo_full:
-        raise ValueError("REPO_NAME esperado no formato owner/repo")
-    owner, repo_name = repo_full.split("/", 1)
+    github_token = os.getenv("GIT_TOKEN")
+    pr_number = os.getenv("PR_NUMBER")
+    repo_name = os.getenv("REPO_NAME")
 
-    if not openai_api_key or not github_token or pr_number == 0:
-        raise RuntimeError("Faltam variáveis de ambiente obrigatórias")
+    if not all([openai_api_key, github_token, pr_number, repo_name]):
+        print("Faltando alguma variável de ambiente. Verifique OPENAI_API_KEY, GIT_TOKEN, PR_NUMBER, REPO_NAME.")
+        sys.exit(1)
 
-    print(f"Revisando PR #{pr_number} no repositório {owner}/{repo_name}…")
+    openai.api_key = openai_api_key
+    gh = Github(github_token)
+    repo = gh.get_repo(repo_name)
+    pr = repo.get_pull(int(pr_number))
 
-    try:
-        diff = get_pr_diff(owner, repo_name, pr_number, github_token)
-    except Exception as e:
-        print(f"Erro ao obter diff da PR: {e}")
-        raise
+    # Obter os arquivos modificados no PR
+    files = pr.get_files()
+    diffs = []
+    for f in files:
+        # Focar em extensões relevantes (ajuste conforme sua stack)
+        if f.filename.endswith(('.py', '.js', '.ts')):
+            diff_text = f.patch
+            if diff_text:
+                diffs.append(f"File: {f.filename}\n{diff_text}")
 
-    print("Diff obtido, chamando OpenAI…")
-    try:
-        review = call_openai_review(diff, openai_api_key)
-    except Exception as e:
-        print(f"Erro na chamada à OpenAI: {e}")
-        raise
+    if not diffs:
+        print("Nenhuma mudança relevante detectada para revisão automática.")
+        return
 
-    print("Resposta da OpenAI recebida, publicando comentário na PR…")
-    comment_body = (
-        "### Revisão automática de código\n\n"
-        review + "\n\n"
-        "_Este comentário foi gerado automaticamente._"
+    # Construir prompt para OpenAI
+    prompt = (
+        "Você é um engenheiro sênior de software. "
+        "Revise as seguintes mudanças para bugs, segurança, performance, manutenção e estilo de código:\n\n"
+        + "\n\n".join(diffs)
     )
-    try:
-        post_pr_comment(owner, repo_name, pr_number, github_token, comment_body)
-    except Exception as e:
-        print(f"Erro ao postar comentário na PR: {e}")
-        raise
 
-    print("Comentário publicado com sucesso.")
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-5.1",
+            messages=[
+                {"role": "system", "content": "Você é um avaliador de código para Pull Requests."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            max_tokens=800
+        )
+    except Exception as e:
+        print("Erro ao chamar API da OpenAI:", e)
+        sys.exit(1)
+
+    review_comments = response["choices"][0]["message"]["content"]
+    print("Comentários do agente:\n", review_comments)
+
+    # Postar comentário no PR
+    try:
+        pr.create_issue_comment(f"🤖 Revisão automática:\n\n{review_comments}")
+        print("Comentário publicado no PR.")
+    except Exception as e:
+        print("Erro ao publicar comentário no PR:", e)
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
