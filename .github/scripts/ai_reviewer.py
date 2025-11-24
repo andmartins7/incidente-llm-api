@@ -9,12 +9,12 @@ from typing import List
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    datefmt="%Y-%m-d %H:%M:%S"
 )
 
-def get_env_var(name: str) -> str:
+def get_env_var(name: str, required: bool=True) -> str:
     value = os.getenv(name)
-    if not value:
+    if required and not value:
         logging.error(f"Variável de ambiente obrigatória faltando: {name}")
         sys.exit(1)
     return value
@@ -36,7 +36,7 @@ def call_openai_model(api_key: str, diffs: List[str]) -> str:
     )
     try:
         response = openai.ChatCompletion.create(
-            model="gpt-4o",  # ajuste conforme modelo disponível na sua conta
+            model="gpt-5.1-codex-mini",
             messages=[
                 {"role": "system", "content": "Você é avaliador de código para Pull Requests."},
                 {"role": "user", "content": prompt}
@@ -52,7 +52,7 @@ def call_openai_model(api_key: str, diffs: List[str]) -> str:
 
 def post_comment(pr, message: str):
     try:
-        pr.create_issue_comment(f"Revisão automática:\n\n{message}")
+        pr.create_issue_comment(f"🤖 Revisão automática:\n\n{message}")
         logging.info("Comentário publicado no PR com sucesso.")
     except GithubException as e:
         logging.error(f"Falha ao publicar comentário no PR: {e}")
@@ -61,7 +61,11 @@ def post_comment(pr, message: str):
 def main():
     # Obter variáveis de ambiente
     openai_api_key = get_env_var("OPENAI_API_KEY")
-    github_token = get_env_var("GIT_TOKEN")
+    github_token = os.getenv("GIT_TOKEN") or os.getenv("GITHUB_TOKEN")
+    if not github_token:
+        logging.error("Não foi encontrado token de GitHub. Variables GIT_TOKEN ou GITHUB_TOKEN devem estar configuradas.")
+        sys.exit(1)
+
     pr_number_str = get_env_var("PR_NUMBER")
     repo_name = get_env_var("REPO_NAME")
 
