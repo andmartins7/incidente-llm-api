@@ -32,9 +32,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO_NAME: ${{ github.repository }}
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
         run: |
-          python .github/scripts/ai_reviewer.py
+          python .github/scripts/ai_reviewer.py || exit 0
 
-      - name: Mensagem de finalização
+      - name: Notificação no Teams
+        if: always()
         run: |
-          echo "Revisão automática concluída para PR #${{ github.event.pull_request.number }} do repositório ${{ github.repository }}"
+          curl -H "Content-Type: application/json" \
+                -d "{\"text\":\"Revisão automática concluída para PR #${{ env.PR_NUMBER }} no repositório ${{ env.REPO_NAME }}\"}" \
+                ${{ env.TEAMS_WEBHOOK_URL }}
+
+      - name: Finalização
+        run: echo "Workflow concluído para PR #${{ github.event.pull_request.number }}"
