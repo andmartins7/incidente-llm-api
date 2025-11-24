@@ -46,6 +46,7 @@ ollama pull llama3.2
 ```bash
 export OLLAMA_HOST=http://localhost:11434
 export OLLAMA_MODEL=llama3.2  # ou tinyllama
+export LOG_LEVEL=INFO
 export TZ=America/Sao_Paulo
 ```
 
@@ -95,8 +96,8 @@ Saída **esperada** (exemplo):
 
 1. **Pré-processamento** do texto (`src/preprocess.py`): normaliza espaços, corrige padrões comuns de hora/data etc.
 2. **Chamada ao LLM local** (`src/llm_client.py`): usa o endpoint **Ollama** (`/api/chat`) com um prompt **instruído a responder somente JSON**.
-3. **Validação e Fallback** (`src/extractors.py`): valida o JSON; se estiver inválido ou incompleto, usa **expressões regulares** e **heurísticas** (com `dateparser`) para preencher os campos.
-4. **API FastAPI** (`src/main.py`): expõe `POST /extract`, `GET /healthz`, `GET /example`.
+3. **Validação e Fallback** (`src/extractors.py`): valida o JSON com um **schema JSON (jsonschema)**; se estiver inválido ou incompleto, usa **expressões regulares**, **dicionário/NER local de localidades** e **heurísticas** (com `dateparser`) para preencher os campos.
+4. **API FastAPI** (`src/main.py`): expõe `POST /extract`, `GET /healthz`, `GET /example` e `GET /metrics` (Prometheus). Inclui **logs estruturados** em JSON.
 
 ---
 
